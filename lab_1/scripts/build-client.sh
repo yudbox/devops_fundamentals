@@ -1,0 +1,3 @@
+export ENV_CONFIGURATION=production
+
+pwd
