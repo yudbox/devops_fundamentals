@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# скопировал часть из build-client скрипта. Хотя можно было продолжить в билд скрипте
+
 export ENV_CONFIGURATION=production
 
 PROJECT_FOLDER=shop-angular-cloudfront
@@ -25,15 +27,21 @@ fi
 
 npm install
 
-npm run build --configuration=$ENV_CONFIGURATION
+npm run lint
 
-if [[ -f $BUILD_ZIP_FILE ]]
-    then rm $BUILD_ZIP_FILE
-    echo "$BUILD_ZIP_FILE was deleted"
-    else
-    echo "$BUILD_ZIP_FILE not exist"
+if [[ $? != 0 ]]; then
+    echo
+    echo "linting not passed"
+    exit 1
 fi
 
-zip -r dist/client-app.zip dist/
+npm run test
+
+if [[ $? != 0 ]]; then
+    echo
+    echo "testing not passed"
+    exit 1
+fi
 
 
+npm run build --configuration=$ENV_CONFIGURATION
