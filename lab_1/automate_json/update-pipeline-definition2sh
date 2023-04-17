@@ -1,0 +1,155 @@
+#!/bin/bash
+
+typeset outputDir="../"
+
+checkJQ() {
+	if ! command -v jq &> /dev/null
+	then
+			echo "JQ is not installed on this machine."
+			echo "To install JQ on Ubuntu or Debian, run:"
+			echo "sudo apt-get install jq"
+			echo "To install JQ on CentOS or RHEL, run:"
+			echo "sudo yum install jq"
+			echo "To install JQ on macOS using Homebrew, run:"
+			echo "brew install jq"
+			exit 1
+	fi
+}
+
+isWizardMode() {
+	if [ $# -lt 1 ]; then
+		wizardMode=true
+	else
+		wizardMode=false
+		inputFile="$1"
+	fi
+}
+
+checkDefinitions() {
+	# Check if necessary properties are present in the JSON file
+	if ! jq -e '.pipeline' "$inputFile" > /dev/null 2>&1; then
+		echo "The 'pipeline' property is missing from the JSON file."
+		exit 1
+	fi
+
+	if ! jq -e '.pipeline.version' "$inputFile" > /dev/null 2>&1; then
+		echo "The 'version' property is missing from the JSON file."
+		exit 1
+	fi
+
+	if ! jq -e '.pipeline.stages[0].actions[0].configuration.Branch' "$inputFile" > /dev/null 2>&1; then
+		echo "The 'Branch' property in the 'Source' action's configuration is missing from the JSON file."
+		exit 1
+	fi
+
+	if ! jq -e '.pipeline.stages[0].actions[0].configuration.Owner' "$inputFile" > /dev/null 2>&1; then
+		echo "The 'Owner' property in the 'Source' action's configuration is missing from the JSON file."
+		exit 1
+	fi
+
+	if ! jq -e '.pipeline.stages[0].actions[0].configuration' "$inputFile" >/dev/null; then
+		echo "Error: 'configuration' property is missing in the first stage's first action's JSON object in the pipeline JSON file."
+		exit 1
+	fi
+
+	if ! jq -e '.pipeline.stages[0].actions[0].configuration.Repo' "$inputFile" >/dev/null; then
+		echo "Error: 'Repo' property is missing in the first stage's first action's configuration JSON object in the pipeline JSON file."
+		exit 1
+	fi
+
+	if ! jq -e '.pipeline.stages[0].actions[0].configuration.PollForSourceChanges' "$inputFile" >/dev/null; then
+		echo "Error: 'PollForSourceChanges' property is missing in the first stage's first action's configuration JSON object in the pipeline JSON file."
+		exit 1
+	fi
+}
+
+save() {
+	# get the current date and time
+	timestamp=$(date +%Y-%m-%d_%H-%M-%S)
+
+	# get the name for the output file
+	typeset outputFileName="pipeline-$timestamp.json"
+
+	# "save" the file with the desired name
+	mv temp.json "$outputDir/$outputFileName"
+}
+
+checkJQ
+isWizardMode "$@"
+
+# if we are not in wizard mode then we are done here
+if [ "$wizardMode" = false ]; then
+	checkDefinitions
+
+	# remove the "metadata" property from the JSON
+	# and incerement the "version" property
+	jq '
+		del(.metadata) |
+		.pipeline.version += 1
+	' $inputFile > temp.json
+
+  save
+	exit 0
+fi
+
+echo "Entering wizard mode"
+
+read -p "Please, enter the pipeline’s definitions file path (default: ../pipeline.json): " inputFile
+inputFile=${inputFile:-../pipeline.json}
+checkDefinitions
+
+read -p "Which BUILD_CONFIGURATION name are you going to use (default: ''): " buildConfig
+buildConfig=${buildConfig:-""}
+
+read -p "Enter a GitHub owner/account: " owner
+owner=${owner}
+if [[ -z "$owner" ]]; then
+    echo "Error: owner argument is required." >&2
+    exit 1
+fi
+
+read -p "Enter a GitHub repository name: " repositoryName
+repositoryName=${repositoryName}
+if [[ -z "$repositoryName" ]]; then
+    echo "Error: repositoryName argument is required." >&2
+    exit 1
+fi
+
+read -p "Enter a GitHub branch name (default: develop): " branch
+branch=${branch:-develop}
+
+read -p "Do you want the pipeline to poll for changes (yes/no) (default: no)?: " enablePollingInput
+if [[ "$enablePollingInput" == "no" ]]; then
+  enablePolling=false
+else
+  enablePolling=true
+fi
+
+read -p "Do you want to save changes (yes/no) (default: yes)?: " saveChanges
+saveChanges=${saveChanges:-yes}
+if [[ "$saveChanges" != "yes" ]]; then
+  echo "Exiting without saving changes."
+  exit 0
+fi
+
+jq --arg buildConfig "$buildConfig" \
+	--arg owner "$owner" \
+	--arg repositoryName "$repositoryName" \
+	--arg enablePolling "$enablePolling" \
+	--arg branch "$branch" '
+	 .pipeline.stages[].actions[].configuration |=
+    if has("EnvironmentVariables")
+    then .EnvironmentVariables |= (
+        (fromjson | map(if .name == "BUILD_CONFIGURATION" then .value = $buildConfig else . end)) |
+        tostring
+    )
+    else . end |
+   .pipeline.stages[0].actions[0].configuration.Owner = $owner |
+   .pipeline.stages[0].actions[0].configuration.Branch = $branch |
+   .pipeline.stages[0].actions[0].configuration.Repo = $repositoryName |
+   .pipeline.stages[0].actions[0].configuration.PollForSourceChanges = $enablePolling |
+   del(.metadata) |
+   .pipeline.version += 1  
+' $inputFile > temp.json
+
+save
