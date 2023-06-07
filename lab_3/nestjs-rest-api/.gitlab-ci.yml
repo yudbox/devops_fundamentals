@@ -1,0 +1,57 @@
+image: node:12.14.1
+
+variables:
+  NODE_VERSION: "12.14.1"
+  CHROME_BIN: "/usr/bin/chromium-browser"
+  SNYK_TOKEN: "c0c46d0b-67cd-43c3-8e6f-3f39cbbf6a2d"
+
+stages:
+  - install_dependencies
+  - lint
+  - test
+  - snyk_test
+  - build
+
+install_dependencies:
+  stage: install_dependencies
+  image: node:12.14.1
+  script:
+    - npm ci
+
+lint:
+  stage: lint
+  script:
+    - npm install
+    - npm run lint
+
+test:
+  stage: test
+  script:
+    - npm install
+    - npm run test:e2e
+
+dependency_scanning:
+  image: node:latest
+  stage: test
+  script:
+    - npm install -g npm@latest
+    - npm install -g snyk
+    - npm install snyk-to-html -g
+    - snyk --help
+    - snyk auth $SNYK_TOKEN
+    - snyk monitor --all-projects --org=gryshchukoleksandra
+
+  artifacts:
+    when: always
+    paths:
+      - snyk_results.html
+
+build:
+  stage: build
+  image: node:12.14.1
+  script:
+    - npm ci
+    - npm run build
+  artifacts:
+    paths:
+      - dist/

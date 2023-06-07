@@ -1,0 +1,73 @@
+image: node:16
+
+variables:
+  NODE_VERSION: "16"
+  CODECOV_TOKEN: "438ebb3b-009e-4423-abb4-bbb6d87d0593"
+  CHROME_BIN: "/usr/bin/chromium-browser"
+  SNYK_TOKEN: "c0c46d0b-67cd-43c3-8e6f-3f39cbbf6a2d"
+
+stages:
+  - install_dependencies
+  - test
+  - snyk_test
+  - build
+  - deploy
+
+install_dep:
+  stage: install_dependencies
+  image: node:14
+  script:
+    - npm install
+    - npm install -D eslint-plugin-prefer-arrow
+
+install_ang:
+  stage: install_dependencies
+  image: node:14
+  script:
+    - npm install -D typescript @angular/cli @angular/compiler
+    - npm install -g @angular/cli
+
+test:
+  stage: test
+  script:
+    - npm install @angular/cli
+    - npm install -D eslint-plugin-prefer-arrow
+    - ./node_modules/.bin/ng lint
+
+dependency_scanning:
+  image: node:latest
+  stage: test
+  script:
+    - npm install -g npm@latest
+    - npm install -g snyk
+    - npm install snyk-to-html -g
+    - snyk --help
+    - snyk auth $SNYK_TOKEN
+    - snyk monitor --project-name=$CI_PROJECT_NAME
+
+  artifacts:
+    when: always
+    paths:
+      - snyk_results.html
+
+build_ang:
+  stage: build
+  image: node:14
+  script:
+    - npm install @angular/cli
+    - ./node_modules/.bin/ng build
+  artifacts:
+    paths:
+      - dist/
+
+deploy:
+  stage: deploy
+  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-base:latest
+  script:
+    - export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+    - export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+    - export AWS_DEFAULT_REGION=us-east-2
+    - aws s3 sync ./dist s3://angular-shop-test/ --delete
+    - aws cloudfront create-invalidation --distribution-id $DISTRIBUTION_ID --paths /index.html
+  only:
+    - main

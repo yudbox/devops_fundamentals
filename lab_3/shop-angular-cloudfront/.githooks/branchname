@@ -1,0 +1,90 @@
+
+#!/usr/bin/env bash
+LC_ALL=C
+BLUE=$(tput setaf 4)
+RED=$(tput setaf 1)
+GREEN=$(tput setaf 2)
+YELLOW=$(tput setaf 3)
+NORMAL=$(tput sgr0)
+
+local_branch="$(git rev-parse --abbrev-ref HEAD)"
+
+platform_match_group="(direct|opm|px|devex|imp|engine)"
+carrier_match_group="(bbb|ccc|ddd|eee|xxx|fff)"
+
+
+
+general_match_group="(etc|style|feat|docs|style|refactor)"
+
+jira_ticket_regex="(BTUKAEMSB|DEV|dev|DVX|dvx|lti|LTI|HOT|hot)-[0-9]+(_.+)*"
+platform_carrier_ticket_regex="^${platform_match_group}\/${carrier_match_group}\/${jira_ticket_regex}"
+platform_ticket_regex="^${platform_match_group}\/${jira_ticket_regex}"
+carrier_ticket_regex="^${carrier_match_group}\/${jira_ticket_regex}"
+bare_minimum_regex="^${jira_ticket_regex}"
+
+is_env_branch_regex=".*(master|staging|prod).*"
+general_branch_regex="^${general_match_group}\/.+$"
+sandbox_match_regex="^breathe-sandbox.*"
+
+
+# if [[ $local_branch =~ $is_env_branch_regex ]]
+# allows to get branch value into BASH_REMATCH variable
+# then
+#   if [ $local_branch = $BASH_REMATCH ]
+#   then
+#     exit 0
+#   fi
+# fi
+
+# if [[ $local_branch =~ $general_branch_regex ]]
+# then
+#   if [ $local_branch = $BASH_REMATCH ]
+#   then
+#     exit 0
+#   fi
+# fi
+
+# if [[ $local_branch =~ $sandbox_match_regex ]]
+# then
+#   if [ $local_branch = $BASH_REMATCH ]
+#   then
+#     exit 0
+#   fi
+# fi
+
+# if [[ $local_branch =~ $platform_carrier_ticket_regex ]]
+# then
+#   if [ $local_branch = $BASH_REMATCH ]
+#   then
+#     exit 0
+#   fi
+# fi
+
+# if [[ $local_branch =~ $platform_ticket_regex ]]
+# then
+#   if [ $local_branch = $BASH_REMATCH ]
+#   then
+#     exit 0
+#   fi
+# fi
+
+# if [[ $local_branch =~ $carrier_ticket_regex ]]
+# then
+#   if [ $local_branch = $BASH_REMATCH ]
+#   then
+#     exit 0
+#   fi
+# fi
+
+if [[ ! $local_branch =~ $bare_minimum_regex ]]
+then
+    printf "${RED}Please rename your branch with${NORMAL} git branch -m new_name ${RED}to fit:\n\n${NORMAL}"
+    printf "${GREEN}<optional_platform>/</optional_carrier>/${NORMAL}<DEV|DVX|LTI|HOT>-<ticket_number>${GREEN}_<optional_description>${NORMAL}\n\n"
+    printf "Where platform is: ${BLUE}${platform_match_group}${NORMAL}\n"
+    printf "Where Carrier is: ${BLUE}${carrier_match_group}${NORMAL}\n\n"
+    printf "${YELLOW}If your branch is related to general tasks, you can name your branch to fit the following:\n\n${NORMAL}"
+    printf "${BLUE}${general_match_group}/<description>${NORMAL}\n\n"
+    printf "${YELLOW}If you believe there should be a new platform/carrier/general, please add them in .githooks/branchname${NORMAL}\n\n"
+    exit 1
+fi
+exit 0
